@@ -9,6 +9,7 @@ from mailbomb.auth import get_credentials_path, get_token_path, get_gmail_servic
 from mailbomb.db import init_db
 from mailbomb.scanner import scan_messages
 from mailbomb.analyzer import top_senders_by_count, top_senders_by_size, mailing_lists, breakdown_by_year, total_size
+from mailbomb.executor import delete_messages, resolve_message_ids
 
 console = Console()
 
@@ -141,6 +142,74 @@ def analyze(before, after, top):
     total = total_size(conn)
     console.print(f"\n[bold]Total indexed:[/bold] {total / (1024*1024):.1f} MB")
     conn.close()
+
+
+@cli.command()
+@click.option("--sender", default=None, help="Delete all messages from this sender email")
+@click.option("--list-id", default=None, help="Delete all messages with this List-Id")
+@click.option("--before", default=None, help="Delete messages before this date")
+@click.option("--after", default=None, help="Delete messages after this date")
+@click.option("--min-size", default=None, help="Delete messages larger than this (e.g., 5MB)")
+@click.option("--dry-run", is_flag=True, help="Show what would be deleted without deleting")
+def delete(sender, list_id, before, after, min_size, dry_run):
+    """Delete messages matching the given filters."""
+    from rich.table import Table
+    from mailbomb.db import get_connection
+
+    if not any([sender, list_id, before, min_size]):
+        console.print("[red]Specify at least one filter (--sender, --list-id, --before, --min-size)[/red]")
+        raise SystemExit(1)
+
+    # Parse min_size like "5MB" to bytes
+    size_bytes = None
+    if min_size:
+        min_size = min_size.upper()
+        if min_size.endswith("MB"):
+            size_bytes = int(float(min_size[:-2]) * 1024 * 1024)
+        elif min_size.endswith("KB"):
+            size_bytes = int(float(min_size[:-2]) * 1024)
+        elif min_size.endswith("GB"):
+            size_bytes = int(float(min_size[:-2]) * 1024 * 1024 * 1024)
+        else:
+            size_bytes = int(min_size)
+
+    conn = get_connection()
+    ids = resolve_message_ids(
+        conn,
+        sender_email=sender,
+        list_id=list_id,
+        before=before,
+        after=after,
+        min_size=size_bytes,
+    )
+
+    if not ids:
+        console.print("[yellow]No matching messages found.[/yellow]")
+        conn.close()
+        return
+
+    # Show summary
+    total_size_bytes = conn.execute(
+        f"SELECT COALESCE(SUM(size_bytes), 0) FROM messages WHERE gmail_id IN ({','.join('?' for _ in ids)})",
+        ids,
+    ).fetchone()[0]
+
+    console.print(f"\n[bold]Messages to delete:[/bold] {len(ids):,}")
+    console.print(f"[bold]Space to reclaim:[/bold] {total_size_bytes / (1024*1024):.1f} MB")
+
+    if dry_run:
+        console.print("\n[yellow]Dry run — no messages deleted.[/yellow]")
+        conn.close()
+        return
+
+    if not click.confirm(f"\nPermanently delete {len(ids):,} messages?"):
+        console.print("Cancelled.")
+        conn.close()
+        return
+
+    conn.close()
+    deleted = delete_messages(ids)
+    console.print(f"\n[green]✓ Deleted {deleted:,} messages[/green]")
 
 
 if __name__ == "__main__":
