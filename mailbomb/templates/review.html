@@ -2,9 +2,383 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MailBomb Review</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .header {
+            background: #16213e;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #0f3460;
+        }
+        .header h1 { font-size: 20px; color: #e94560; }
+        .progress {
+            font-size: 14px;
+            color: #a0a0a0;
+        }
+        .progress strong { color: #e94560; }
+        .mic-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: #0f3460;
+        }
+        .mic-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+        }
+        .mic-dot.active { background: #4ecca3; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .container { max-width: 700px; margin: 40px auto; padding: 0 24px; }
+        .card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 28px;
+            border: 1px solid #0f3460;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        .sender { font-size: 18px; font-weight: 600; color: #fff; }
+        .sender-email { font-size: 14px; color: #a0a0a0; margin-top: 4px; }
+        .score-badge {
+            background: #e94560;
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .stats {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: #a0a0a0;
+        }
+        .stats strong { color: #4ecca3; }
+        .subjects {
+            margin-bottom: 16px;
+        }
+        .subjects h3 {
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .subject-line {
+            font-size: 14px;
+            color: #c0c0c0;
+            padding: 4px 0;
+            border-bottom: 1px solid #0f3460;
+        }
+        .snippet-box {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #b0b0b0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .snippet-box h3 {
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+        }
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .btn:hover { transform: scale(1.02); }
+        .btn:active { transform: scale(0.98); }
+        .btn-trash { background: #e94560; color: #fff; }
+        .btn-keep { background: #4ecca3; color: #1a1a2e; }
+        .btn-skip { background: #0f3460; color: #a0a0a0; }
+        .btn-rule { background: #533483; color: #fff; }
+        .btn kbd {
+            display: inline-block;
+            background: rgba(0,0,0,0.2);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-left: 6px;
+        }
+        .voice-heard {
+            text-align: center;
+            padding: 8px;
+            margin-top: 12px;
+            font-size: 13px;
+            color: #4ecca3;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .voice-heard.show { opacity: 1; }
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: #a0a0a0;
+            font-size: 18px;
+        }
+        .done {
+            text-align: center;
+            padding: 60px;
+        }
+        .done h2 { color: #4ecca3; margin-bottom: 12px; }
+        .shortcuts {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 13px;
+            color: #666;
+        }
+    </style>
 </head>
 <body>
-    <h1>MailBomb Review</h1>
+    <div class="header">
+        <h1>MailBomb Review</h1>
+        <div class="progress" id="progress">Loading...</div>
+        <div class="mic-status" id="micToggle" onclick="toggleMic()">
+            <div class="mic-dot" id="micDot"></div>
+            <span id="micLabel">Mic off</span>
+        </div>
+    </div>
+    <div class="container">
+        <div id="content">
+            <div class="loading">Loading patterns...</div>
+        </div>
+        <div class="shortcuts">
+            Keyboard: <kbd>T</kbd> Toss &nbsp; <kbd>K</kbd> Keep &nbsp; <kbd>S</kbd> Skip &nbsp; <kbd>R</kbd> Rule &nbsp; <kbd>M</kbd> More snippets
+        </div>
+    </div>
+
+    <script>
+        let patterns = [];
+        let currentIndex = 0;
+        let stats = { trashed: 0, trashedSize: 0, reviewed: 0 };
+        let micActive = false;
+        let recognition = null;
+
+        // --- Data ---
+        async function loadPatterns() {
+            const resp = await fetch("/api/patterns");
+            patterns = await resp.json();
+            if (patterns.length > 0) {
+                showCard(0);
+            } else {
+                document.getElementById("content").innerHTML =
+                    '<div class="done"><h2>All clear!</h2><p>No patterns to review.</p></div>';
+            }
+            updateProgress();
+        }
+
+        async function loadSnippet(gmailId) {
+            const resp = await fetch(`/api/snippet/${gmailId}`);
+            const data = await resp.json();
+            return data.snippet || "[No preview available]";
+        }
+
+        // --- Rendering ---
+        function showCard(index) {
+            if (index >= patterns.length) {
+                document.getElementById("content").innerHTML =
+                    '<div class="done"><h2>All done!</h2><p>No more patterns to review this session.</p></div>';
+                return;
+            }
+            currentIndex = index;
+            const p = patterns[index];
+            const sizeMB = (p.total_size / (1024 * 1024)).toFixed(1);
+            const scorePercent = Math.min(100, Math.round(p.score));
+            const subjects = (p.sample_subjects || [])
+                .map(s => `<div class="subject-line">${escHtml(s)}</div>`)
+                .join("");
+
+            document.getElementById("content").innerHTML = `
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="sender">${escHtml(p.sender_email)}</div>
+                            ${p.list_id ? `<div class="sender-email">List: ${escHtml(p.list_id)}</div>` : ""}
+                        </div>
+                        <div class="score-badge">${scorePercent}% bulk</div>
+                    </div>
+                    <div class="stats">
+                        <span><strong>${p.count.toLocaleString()}</strong> messages</span>
+                        <span><strong>${sizeMB}</strong> MB</span>
+                    </div>
+                    <div class="subjects"><h3>Sample Subjects</h3>${subjects || "<em>No subjects</em>"}</div>
+                    <div class="snippet-box" id="snippetBox">
+                        <h3>Preview</h3>
+                        <div id="snippetText">Loading...</div>
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-trash" onclick="doAction('trash')">Toss <kbd>T</kbd></button>
+                        <button class="btn btn-keep" onclick="doAction('keep')">Keep <kbd>K</kbd></button>
+                        <button class="btn btn-skip" onclick="doAction('skip')">Skip <kbd>S</kbd></button>
+                        <button class="btn btn-rule" onclick="doAction('rule')">Rule <kbd>R</kbd></button>
+                    </div>
+                    <div class="voice-heard" id="voiceHeard"></div>
+                </div>
+            `;
+
+            // Load snippet
+            if (p.sample_gmail_id) {
+                loadSnippet(p.sample_gmail_id).then(text => {
+                    const el = document.getElementById("snippetText");
+                    if (el) el.textContent = text;
+                });
+            }
+        }
+
+        // --- Actions ---
+        async function doAction(action) {
+            const p = patterns[currentIndex];
+            const body = JSON.stringify({
+                sender_email: p.sender_email,
+                list_id: p.list_id,
+            });
+            const opts = { method: "POST", headers: {"Content-Type": "application/json"}, body };
+
+            if (action === "trash") {
+                const resp = await fetch("/api/trash", opts);
+                const data = await resp.json();
+                stats.trashed += data.trashed;
+                stats.trashedSize += p.total_size;
+            } else if (action === "keep") {
+                await fetch("/api/keep", opts);
+            } else if (action === "skip") {
+                await fetch("/api/skip", opts);
+            } else if (action === "rule") {
+                const resp = await fetch("/api/rule", opts);
+                const data = await resp.json();
+                stats.trashed += data.trashed;
+                stats.trashedSize += p.total_size;
+            }
+
+            stats.reviewed++;
+            updateProgress();
+            showCard(currentIndex + 1);
+        }
+
+        function updateProgress() {
+            const sizeMB = (stats.trashedSize / (1024 * 1024)).toFixed(1);
+            document.getElementById("progress").innerHTML =
+                `Reviewed <strong>${stats.reviewed}</strong>/${patterns.length} — ` +
+                `<strong>${stats.trashed.toLocaleString()}</strong> trashed (${sizeMB} MB)`;
+        }
+
+        // --- Keyboard ---
+        document.addEventListener("keydown", (e) => {
+            if (e.target.tagName === "INPUT") return;
+            switch (e.key.toLowerCase()) {
+                case "t": doAction("trash"); break;
+                case "k": doAction("keep"); break;
+                case "s": doAction("skip"); break;
+                case "r": doAction("rule"); break;
+                case "m": loadMoreSnippets(); break;
+            }
+        });
+
+        async function loadMoreSnippets() {
+            const p = patterns[currentIndex];
+            const conn_ids = await fetch(
+                `/api/patterns`
+            ).then(r => r.json());
+            // Just show a note for now — could expand to fetch more samples
+            const el = document.getElementById("snippetText");
+            if (el) el.textContent += "\n\n[Use Gmail to inspect more messages from this sender]";
+        }
+
+        // --- Voice ---
+        function setupVoice() {
+            if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+                document.getElementById("micLabel").textContent = "No mic support";
+                return;
+            }
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SR();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+
+            recognition.onresult = (event) => {
+                const last = event.results[event.results.length - 1];
+                if (!last.isFinal) return;
+                const text = last[0].transcript.trim().toLowerCase();
+                showVoiceHeard(text);
+
+                if (text.includes("toss") || text.includes("trash")) doAction("trash");
+                else if (text.includes("keep")) doAction("keep");
+                else if (text.includes("skip") || text.includes("next")) doAction("skip");
+                else if (text.includes("rule")) doAction("rule");
+                else if (text.includes("show") || text.includes("more")) loadMoreSnippets();
+            };
+
+            recognition.onend = () => {
+                if (micActive) recognition.start();
+            };
+        }
+
+        function toggleMic() {
+            if (!recognition) return;
+            micActive = !micActive;
+            if (micActive) {
+                recognition.start();
+                document.getElementById("micDot").classList.add("active");
+                document.getElementById("micLabel").textContent = "Listening";
+            } else {
+                recognition.stop();
+                document.getElementById("micDot").classList.remove("active");
+                document.getElementById("micLabel").textContent = "Mic off";
+            }
+        }
+
+        function showVoiceHeard(text) {
+            const el = document.getElementById("voiceHeard");
+            if (!el) return;
+            el.textContent = `Heard: "${text}"`;
+            el.classList.add("show");
+            setTimeout(() => el.classList.remove("show"), 2000);
+        }
+
+        function escHtml(s) {
+            const d = document.createElement("div");
+            d.textContent = s || "";
+            return d.innerHTML;
+        }
+
+        // --- Init ---
+        setupVoice();
+        loadPatterns();
+    </script>
 </body>
 </html>
