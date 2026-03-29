@@ -82,6 +82,24 @@ def test_api_keep(client):
     assert response.status_code == 200
 
 
+def test_api_trash_requires_sender(client):
+    response = client.post(
+        "/api/trash",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+
+
+def test_api_rule_requires_sender(client):
+    response = client.post(
+        "/api/rule",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+
+
 def test_api_rule(client):
     with patch("mailbomb.web.trash_messages", return_value=10):
         response = client.post(

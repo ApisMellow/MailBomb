@@ -53,6 +53,9 @@ def create_app(db_path=None):
         sender_email = data.get("sender_email")
         list_id = data.get("list_id")
 
+        if not sender_email and not list_id:
+            return jsonify({"error": "sender_email or list_id required"}), 400
+
         conn = _get_conn()
         ids = resolve_message_ids(conn, sender_email=sender_email, list_id=list_id)
         conn.close()
@@ -83,6 +86,9 @@ def create_app(db_path=None):
         data = request.get_json()
         sender_email = data.get("sender_email")
         list_id = data.get("list_id")
+
+        if not sender_email and not list_id:
+            return jsonify({"error": "sender_email or list_id required"}), 400
 
         # Trash messages
         conn = _get_conn()
