@@ -1,9 +1,18 @@
 import json
 import pytest
 from unittest.mock import patch, MagicMock
+from click.testing import CliRunner
+from mailbomb.cli import cli
 from mailbomb.db import init_db, get_connection, upsert_message
 from mailbomb.snippets import save_snippet
 from mailbomb.web import create_app
+
+
+def test_review_command_exists():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["review", "--help"])
+    assert result.exit_code == 0
+    assert "review" in result.output.lower()
 
 
 @pytest.fixture

@@ -244,5 +244,21 @@ def stats():
     conn.close()
 
 
+@cli.command()
+@click.option("--port", default=5000, help="Port for the review server")
+def review(port):
+    """Launch the web-based triage interface."""
+    import webbrowser
+    from mailbomb.web import create_app
+
+    console.print(f"\n[bold]Starting MailBomb Review on port {port}...[/bold]")
+    console.print(f"  Open [link]http://localhost:{port}[/link] if it doesn't open automatically\n")
+    console.print("  [dim]Press Ctrl+C to stop[/dim]\n")
+
+    app = create_app()
+    webbrowser.open(f"http://localhost:{port}")
+    app.run(port=port, debug=False)
+
+
 if __name__ == "__main__":
     cli()
