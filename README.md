@@ -8,7 +8,8 @@ Built for mailboxes too large for Gmail's web UI or MCP connectors to handle.
 
 1. **Scan** — queries Gmail API with date windows (e.g., `before:2006/01/01`), pulls only message metadata (sender, subject, date, size — no bodies), stores in a local SQLite database
 2. **Analyze** — runs queries over the local index to surface patterns: top senders, mailing lists, size hogs, year-by-year breakdown
-3. **Delete** — takes filter criteria, resolves to message IDs, batch-deletes via Gmail API (up to 1000 per call), marks deleted locally
+3. **Review** — launches a local web UI that ranks sender groups by junk likelihood and lets you triage with keyboard or voice
+4. **Delete** — takes filter criteria, resolves to message IDs, batch-deletes via Gmail API (up to 1000 per call), marks deleted locally
 
 Scanning is resumable — if interrupted, it skips messages already in the database.
 
@@ -20,11 +21,29 @@ Scanning is resumable — if interrupted, it skips messages already in the datab
 ## Installation
 
 ```bash
-cd /path/to/MailBomb
+git clone <repo-url>
+cd MailBomb
+
+# Create a virtual environment and install
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
+
+This installs a `mailbomb` command into your virtual environment. **You must activate the venv every time you open a new terminal:**
+
+```bash
+cd /path/to/MailBomb
+source .venv/bin/activate
+```
+
+After activation, verify it works:
+
+```bash
+mailbomb --help
+```
+
+You should see the list of available commands (setup, scan, analyze, delete, review, stats).
 
 ## Google Cloud Setup (One-Time)
 
@@ -120,7 +139,7 @@ Shows:
 
 ### Delete messages
 
-Always use `--dry-run` first to preview:
+Always use `--dry-run` first to preview what would be affected:
 
 ```bash
 # Preview deleting all messages from a sender
@@ -136,7 +155,7 @@ mailbomb delete --before 2008-01-01 --min-size 10MB --dry-run
 mailbomb delete --sender "notifications@facebook.com"
 ```
 
-Deletions are **permanent** (bypasses trash). The tool always asks for confirmation before executing.
+By default, deletions **move messages to trash** (recoverable for 30 days). Use `--permanent` to permanently delete instead. Use `--yes` (`-y`) to skip the confirmation prompt.
 
 ### Check progress
 
@@ -167,28 +186,32 @@ Opens a local web interface for smart triage. The tool analyzes your indexed mes
 
 **Voice:** Click the mic icon to enable voice commands. Say "toss", "keep", "skip", or "rule".
 
-The review server runs on `http://localhost:5000` by default. Use `--port` to change it.
+The review server runs on `http://localhost:5050` by default. Use `--port` to change it.
 
 ## Typical Workflow
 
 ```bash
-# 1. Set up (one time)
+# 1. Activate the virtual environment (every new terminal session)
+source .venv/bin/activate
+
+# 2. Set up Gmail credentials (one time)
 mailbomb setup
 
-# 2. Scan your oldest mail
+# 3. Scan your oldest mail
 mailbomb scan --before 2006-01-01
 
-# 3. See what's there
+# 4. See what's there
 mailbomb analyze
 
-# 4. Kill the obvious junk (dry-run first!)
+# 5. Use the web UI to triage bulk senders
+mailbomb review
+
+# 6. Or target specific senders from the command line (dry-run first!)
 mailbomb delete --sender "deals@groupon.com" --dry-run
 mailbomb delete --sender "deals@groupon.com"
 
-# 5. Scan the next chunk
+# 7. Scan the next chunk and repeat
 mailbomb scan --before 2008-01-01 --after 2006-01-01
-
-# 6. Repeat analyze → delete → scan forward
 mailbomb analyze
 mailbomb stats
 ```
@@ -209,9 +232,11 @@ The database stores only metadata — no message bodies. It tracks which message
 
 ```bash
 source .venv/bin/activate
+pip install pytest    # if not already installed
 pytest tests/ -v
 ```
 
 ## Future Plans
 
+- **Activity sidebar** — right-hand column showing a running log of dispositioned senders as you triage (trashed, kept, ruled)
 - **Rule auto-apply** — automatically apply saved rules when scanning new messages

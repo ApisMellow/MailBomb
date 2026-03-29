@@ -60,6 +60,34 @@ def trash_messages(gmail_ids, db_path=None, batch_size=1000):
     return total_trashed
 
 
+def untrash_messages(gmail_ids, db_path=None, batch_size=1000):
+    """Remove messages from Gmail trash and mark them active in the local DB."""
+    if not gmail_ids:
+        return 0
+
+    service = get_gmail_service()
+    conn = get_connection(db_path)
+    total = 0
+
+    for i in range(0, len(gmail_ids), batch_size):
+        batch = gmail_ids[i : i + batch_size]
+        service.users().messages().batchModify(
+            userId="me",
+            body={"ids": batch, "addLabelIds": ["INBOX"], "removeLabelIds": ["TRASH"]},
+        ).execute()
+
+        placeholders = ",".join("?" for _ in batch)
+        conn.execute(
+            f"UPDATE messages SET deleted = 0 WHERE gmail_id IN ({placeholders})",
+            batch,
+        )
+        conn.commit()
+        total += len(batch)
+
+    conn.close()
+    return total
+
+
 def delete_messages(gmail_ids, db_path=None, batch_size=1000):
     """Permanently delete messages from Gmail and mark them deleted in the local DB.
 

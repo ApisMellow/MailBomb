@@ -58,7 +58,7 @@ def extract_plaintext(parts):
     return ""
 
 
-def fetch_and_cache_snippet(service, conn, gmail_id, max_chars=300):
+def fetch_and_cache_snippet(service, conn, gmail_id, max_chars=800):
     """Fetch message body from Gmail API, extract plaintext, cache it.
 
     Returns the snippet string (truncated to max_chars).

@@ -121,6 +121,65 @@ def test_api_rule(client):
         assert data["rule_created"] is True
 
 
+def test_api_session_trashed_empty(client):
+    response = client.get("/api/session-trashed")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data == []
+
+
+def test_api_session_trashed_after_trash(client):
+    with patch("mailbomb.web.trash_messages", return_value=10):
+        client.post(
+            "/api/trash",
+            data=json.dumps({"sender_email": "deals@spam.com"}),
+            content_type="application/json",
+        )
+    response = client.get("/api/session-trashed")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert len(data) == 10
+    assert all(m["sender_email"] == "deals@spam.com" for m in data)
+
+
+def test_api_untrash(client):
+    with patch("mailbomb.web.untrash_messages", return_value=1) as mock_untrash:
+        response = client.post(
+            "/api/untrash",
+            data=json.dumps({"gmail_ids": ["spam_0"]}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["restored"] == 1
+
+
+def test_api_untrash_requires_ids(client):
+    response = client.post(
+        "/api/untrash",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+
+
+def test_api_fullmessage(client):
+    """Full message endpoint returns full body text."""
+    with patch("mailbomb.web.get_gmail_service") as mock_svc:
+        mock_gmail = MagicMock()
+        mock_svc.return_value = mock_gmail
+        mock_gmail.users().messages().get().execute.return_value = {
+            "payload": {
+                "mimeType": "text/plain",
+                "body": {"data": "SGVsbG8gV29ybGQ="},
+            }
+        }
+        response = client.get("/api/fullmessage/spam_0")
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert "Hello World" in data["body"]
+
+
 def test_api_prefetch(client):
     """Prefetch endpoint triggers snippet loading."""
     with patch("mailbomb.web.get_gmail_service") as mock_svc:

@@ -2,9 +2,9 @@ import json
 from flask import Flask, render_template, request, jsonify
 from mailbomb.auth import get_gmail_service
 from mailbomb.db import get_connection, init_db
-from mailbomb.executor import resolve_message_ids, trash_messages
+from mailbomb.executor import resolve_message_ids, trash_messages, untrash_messages
 from mailbomb.reviewer import rank_patterns
-from mailbomb.snippets import get_snippet, fetch_and_cache_snippet
+from mailbomb.snippets import get_snippet, fetch_and_cache_snippet, extract_plaintext
 from mailbomb.rules import add_rule
 
 
@@ -12,8 +12,8 @@ def create_app(db_path=None):
     app = Flask(__name__)
     app.config["DB_PATH"] = db_path
 
-    # Track session state: skipped and kept senders
-    _session = {"kept": set(), "skipped": set()}
+    # Track session state
+    _session = {"kept": set(), "skipped": set(), "trashed_ids": []}
 
     def _get_conn():
         return get_connection(app.config["DB_PATH"])
@@ -47,6 +47,23 @@ def create_app(db_path=None):
                 return jsonify({"snippet": f"[Could not fetch: {e}]"})
         return jsonify({"snippet": snippet or ""})
 
+    @app.route("/api/fullmessage/<gmail_id>")
+    def api_fullmessage(gmail_id):
+        """Fetch the full message body (no truncation) for the overlay view."""
+        try:
+            service = get_gmail_service()
+            msg = service.users().messages().get(
+                userId="me", id=gmail_id, format="full"
+            ).execute()
+            payload = msg.get("payload", {})
+            parts = payload.get("parts", [])
+            if not parts:
+                parts = [payload]
+            text = extract_plaintext(parts)
+            return jsonify({"body": text})
+        except Exception as e:
+            return jsonify({"body": f"[Could not fetch full message: {e}]"})
+
     @app.route("/api/trash", methods=["POST"])
     def api_trash():
         data = request.get_json()
@@ -62,6 +79,7 @@ def create_app(db_path=None):
 
         if ids:
             count = trash_messages(ids, db_path=app.config["DB_PATH"])
+            _session["trashed_ids"].extend(ids)
         else:
             count = 0
 
@@ -97,6 +115,7 @@ def create_app(db_path=None):
 
         if ids:
             trash_messages(ids, db_path=app.config["DB_PATH"])
+            _session["trashed_ids"].extend(ids)
 
         # Save rule
         conn = _get_conn()
@@ -121,6 +140,45 @@ def create_app(db_path=None):
             "deleted_count": deleted[0],
             "deleted_size": deleted[1],
         })
+
+    @app.route("/api/session-trashed")
+    def api_session_trashed():
+        """Return all individual messages trashed this session with metadata."""
+        ids = _session["trashed_ids"]
+        if not ids:
+            return jsonify([])
+        conn = _get_conn()
+        placeholders = ",".join("?" for _ in ids)
+        rows = conn.execute(
+            f"SELECT gmail_id, sender_email, subject, date, size_bytes "
+            f"FROM messages WHERE gmail_id IN ({placeholders}) "
+            f"ORDER BY sender_email, date",
+            ids,
+        ).fetchall()
+        conn.close()
+        return jsonify([
+            {
+                "gmail_id": r[0],
+                "sender_email": r[1],
+                "subject": r[2],
+                "date": r[3],
+                "size_bytes": r[4],
+            }
+            for r in rows
+        ])
+
+    @app.route("/api/untrash", methods=["POST"])
+    def api_untrash():
+        """Restore individual messages from trash."""
+        data = request.get_json()
+        gmail_ids = data.get("gmail_ids", [])
+        if not gmail_ids:
+            return jsonify({"error": "gmail_ids required"}), 400
+        count = untrash_messages(gmail_ids, db_path=app.config["DB_PATH"])
+        # Remove from session tracking
+        restored = set(gmail_ids)
+        _session["trashed_ids"] = [i for i in _session["trashed_ids"] if i not in restored]
+        return jsonify({"restored": count})
 
     @app.route("/api/prefetch", methods=["POST"])
     def api_prefetch():

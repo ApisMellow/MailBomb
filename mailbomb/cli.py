@@ -245,7 +245,7 @@ def stats():
 
 
 @cli.command()
-@click.option("--port", default=5000, help="Port for the review server")
+@click.option("--port", default=5050, help="Port for the review server")
 def review(port):
     """Launch the web-based triage interface."""
     import webbrowser
@@ -256,7 +256,31 @@ def review(port):
     console.print("  [dim]Press Ctrl+C to stop[/dim]\n")
 
     app = create_app()
-    webbrowser.open(f"http://localhost:{port}")
+    url = f"http://localhost:{port}"
+
+    # Open browser after Flask starts listening (delayed via timer)
+    import subprocess, platform, threading
+
+    def open_browser():
+        opened = False
+        if platform.system() == "Darwin":
+            try:
+                subprocess.Popen(["open", "-a", "Google Chrome", url])
+                opened = True
+            except FileNotFoundError:
+                pass
+        if not opened:
+            for name in ("chrome", "google-chrome", "chromium"):
+                try:
+                    webbrowser.get(name).open(url)
+                    opened = True
+                    break
+                except webbrowser.Error:
+                    continue
+        if not opened:
+            webbrowser.open(url)
+
+    threading.Timer(1.0, open_browser).start()
     app.run(port=port, debug=False)
 
 
