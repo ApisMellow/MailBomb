@@ -7,6 +7,7 @@ from rich.panel import Panel
 
 from mailbomb.auth import get_credentials_path, get_token_path, get_gmail_service
 from mailbomb.db import init_db
+from mailbomb.scanner import scan_messages
 
 console = Console()
 
@@ -58,6 +59,26 @@ def setup():
     init_db()
     console.print("[green]✓ Database initialized[/green]")
     console.print("\n[bold]Setup complete![/bold] Run [bold]mailbomb scan --help[/bold] to get started.")
+
+
+@cli.command()
+@click.option("--before", required=True, help="Scan messages before this date (YYYY-MM-DD)")
+@click.option("--after", default=None, help="Scan messages after this date (YYYY-MM-DD)")
+@click.option("--batch-size", default=100, help="Messages per API page (max 500)")
+def scan(before, after, batch_size):
+    """Scan Gmail and index message metadata locally."""
+    query_parts = []
+    if before:
+        query_parts.append(f"before:{before.replace('-', '/')}")
+    if after:
+        query_parts.append(f"after:{after.replace('-', '/')}")
+
+    query = " ".join(query_parts)
+    console.print(f"[bold]Scanning:[/bold] {query}")
+
+    result = scan_messages(query=query, batch_size=batch_size)
+
+    console.print(f"\n[green]✓ Done![/green] Fetched {result['fetched']:,} new, skipped {result['skipped']:,} existing")
 
 
 if __name__ == "__main__":
