@@ -1,0 +1,18 @@
+[project]
+name = "mailbomb"
+version = "0.1.0"
+description = "Prune massive Gmail mailboxes"
+requires-python = ">=3.10"
+dependencies = [
+    "google-api-python-client>=2.100.0",
+    "google-auth-oauthlib>=1.0.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+mailbomb = "mailbomb.cli:cli"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
