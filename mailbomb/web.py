@@ -1,0 +1,119 @@
+import json
+from flask import Flask, render_template, request, jsonify
+from mailbomb.db import get_connection, init_db
+from mailbomb.executor import resolve_message_ids, trash_messages
+from mailbomb.reviewer import rank_patterns
+from mailbomb.snippets import get_snippet, fetch_and_cache_snippet
+from mailbomb.rules import add_rule
+
+
+def create_app(db_path=None):
+    app = Flask(__name__)
+    app.config["DB_PATH"] = db_path
+
+    # Track session state: skipped and kept senders
+    _session = {"kept": set(), "skipped": set()}
+
+    def _get_conn():
+        return get_connection(app.config["DB_PATH"])
+
+    @app.route("/")
+    def index():
+        return render_template("review.html")
+
+    @app.route("/api/patterns")
+    def api_patterns():
+        conn = _get_conn()
+        patterns = rank_patterns(conn)
+        # Filter out already-kept senders this session
+        patterns = [p for p in patterns if p["sender_email"] not in _session["kept"]]
+        conn.close()
+        return jsonify(patterns)
+
+    @app.route("/api/snippet/<gmail_id>")
+    def api_snippet(gmail_id):
+        conn = _get_conn()
+        snippet = get_snippet(conn, gmail_id)
+        conn.close()
+        if snippet is None:
+            # Try fetching from Gmail (requires auth)
+            try:
+                from mailbomb.auth import get_gmail_service
+                service = get_gmail_service()
+                conn = _get_conn()
+                snippet = fetch_and_cache_snippet(service, conn, gmail_id)
+                conn.close()
+            except Exception as e:
+                return jsonify({"snippet": f"[Could not fetch: {e}]"})
+        return jsonify({"snippet": snippet or ""})
+
+    @app.route("/api/trash", methods=["POST"])
+    def api_trash():
+        data = request.get_json()
+        sender_email = data.get("sender_email")
+        list_id = data.get("list_id")
+
+        conn = _get_conn()
+        ids = resolve_message_ids(conn, sender_email=sender_email, list_id=list_id)
+        conn.close()
+
+        if ids:
+            count = trash_messages(ids, db_path=app.config["DB_PATH"])
+        else:
+            count = 0
+
+        return jsonify({"trashed": count})
+
+    @app.route("/api/keep", methods=["POST"])
+    def api_keep():
+        data = request.get_json()
+        sender_email = data.get("sender_email")
+        _session["kept"].add(sender_email)
+        return jsonify({"kept": True})
+
+    @app.route("/api/skip", methods=["POST"])
+    def api_skip():
+        data = request.get_json()
+        sender_email = data.get("sender_email")
+        _session["skipped"].add(sender_email)
+        return jsonify({"skipped": True})
+
+    @app.route("/api/rule", methods=["POST"])
+    def api_rule():
+        data = request.get_json()
+        sender_email = data.get("sender_email")
+        list_id = data.get("list_id")
+
+        # Trash messages
+        conn = _get_conn()
+        ids = resolve_message_ids(conn, sender_email=sender_email, list_id=list_id)
+        conn.close()
+
+        if ids:
+            trash_messages(ids, db_path=app.config["DB_PATH"])
+
+        # Save rule
+        conn = _get_conn()
+        add_rule(conn, sender_email=sender_email, list_id=list_id)
+        conn.close()
+
+        return jsonify({"rule_created": True, "trashed": len(ids)})
+
+    @app.route("/api/stats")
+    def api_stats():
+        conn = _get_conn()
+        active = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM messages WHERE deleted = 0"
+        ).fetchone()
+        deleted = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM messages WHERE deleted = 1"
+        ).fetchone()
+        conn.close()
+        return jsonify({
+            "active_count": active[0],
+            "active_size": active[1],
+            "deleted_count": deleted[0],
+            "deleted_size": deleted[1],
+        })
+
+    return app
