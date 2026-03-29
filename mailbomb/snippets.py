@@ -29,6 +29,15 @@ def extract_plaintext(parts):
 
     for part in parts:
         mime = part.get("mimeType", "")
+
+        # Recurse into nested multipart structures
+        sub_parts = part.get("parts")
+        if sub_parts:
+            nested = extract_plaintext(sub_parts)
+            if nested and text_part is None:
+                text_part = nested
+            continue
+
         data = part.get("body", {}).get("data", "")
         if not data:
             continue
