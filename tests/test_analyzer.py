@@ -16,13 +16,13 @@ def populated_db(tmp_path):
     conn = get_connection(db_path)
 
     messages = [
-        {"gmail_id": "1", "thread_id": "t1", "sender": "spam@deals.com", "sender_email": "spam@deals.com", "subject": "Deal!", "date": "2005-01-10", "size_bytes": 50000, "labels": "INBOX", "list_id": None},
-        {"gmail_id": "2", "thread_id": "t2", "sender": "spam@deals.com", "sender_email": "spam@deals.com", "subject": "Deal 2!", "date": "2005-03-15", "size_bytes": 50000, "labels": "INBOX", "list_id": None},
-        {"gmail_id": "3", "thread_id": "t3", "sender": "spam@deals.com", "sender_email": "spam@deals.com", "subject": "Deal 3!", "date": "2006-06-01", "size_bytes": 50000, "labels": "INBOX", "list_id": None},
-        {"gmail_id": "4", "thread_id": "t4", "sender": "friend@gmail.com", "sender_email": "friend@gmail.com", "subject": "Hey", "date": "2005-07-20", "size_bytes": 1000, "labels": "INBOX", "list_id": None},
-        {"gmail_id": "5", "thread_id": "t5", "sender": "list@dev.example.com", "sender_email": "list@dev.example.com", "subject": "Digest", "date": "2005-11-01", "size_bytes": 20000, "labels": "INBOX", "list_id": "<dev.example.com>"},
-        {"gmail_id": "6", "thread_id": "t6", "sender": "list@dev.example.com", "sender_email": "list@dev.example.com", "subject": "Digest 2", "date": "2005-12-01", "size_bytes": 25000, "labels": "INBOX", "list_id": "<dev.example.com>"},
-        {"gmail_id": "7", "thread_id": "t7", "sender": "bigfile@corp.com", "sender_email": "bigfile@corp.com", "subject": "Attachment", "date": "2006-02-01", "size_bytes": 5000000, "labels": "INBOX", "list_id": None},
+        {"gmail_id": "1", "thread_id": "t1", "sender": "spam@deals.com", "sender_email": "spam@deals.com", "subject": "Deal!", "date": "Mon, 10 Jan 2005 08:00:00 -0800", "size_bytes": 50000, "labels": "INBOX", "list_id": None},
+        {"gmail_id": "2", "thread_id": "t2", "sender": "spam@deals.com", "sender_email": "spam@deals.com", "subject": "Deal 2!", "date": "Tue, 15 Mar 2005 10:30:00 -0500", "size_bytes": 50000, "labels": "INBOX", "list_id": None},
+        {"gmail_id": "3", "thread_id": "t3", "sender": "spam@deals.com", "sender_email": "spam@deals.com", "subject": "Deal 3!", "date": "Thu, 01 Jun 2006 12:00:00 +0000", "size_bytes": 50000, "labels": "INBOX", "list_id": None},
+        {"gmail_id": "4", "thread_id": "t4", "sender": "friend@gmail.com", "sender_email": "friend@gmail.com", "subject": "Hey", "date": "Wed, 20 Jul 2005 14:22:00 -0700 (PDT)", "size_bytes": 1000, "labels": "INBOX", "list_id": None},
+        {"gmail_id": "5", "thread_id": "t5", "sender": "list@dev.example.com", "sender_email": "list@dev.example.com", "subject": "Digest", "date": "Tue, 01 Nov 2005 09:00:00 GMT", "size_bytes": 20000, "labels": "INBOX", "list_id": "<dev.example.com>"},
+        {"gmail_id": "6", "thread_id": "t6", "sender": "list@dev.example.com", "sender_email": "list@dev.example.com", "subject": "Digest 2", "date": "Thu, 01 Dec 2005 11:15:00 -0600 (CST)", "size_bytes": 25000, "labels": "INBOX", "list_id": "<dev.example.com>"},
+        {"gmail_id": "7", "thread_id": "t7", "sender": "bigfile@corp.com", "sender_email": "bigfile@corp.com", "subject": "Attachment", "date": "Wed, 01 Feb 2006 16:45:00 -0800", "size_bytes": 5000000, "labels": "INBOX", "list_id": None},
     ]
     for msg in messages:
         upsert_message(conn, msg)

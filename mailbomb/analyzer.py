@@ -36,15 +36,30 @@ def mailing_lists(conn):
     return [dict(r) for r in rows]
 
 
+def _extract_year(date_str):
+    """Extract 4-digit year from a date string (RFC 2822 or ISO 8601)."""
+    import re
+    match = re.search(r'\b((?:19|20)\d{2})\b', date_str or "")
+    return match.group(1) if match else None
+
+
 def breakdown_by_year(conn):
     """Return message count and size by year."""
     rows = conn.execute(
-        """SELECT SUBSTR(date, 1, 4) as year, COUNT(*) as count, SUM(size_bytes) as total_size
-           FROM messages WHERE deleted = 0
-           GROUP BY year
-           ORDER BY year""",
+        "SELECT date, size_bytes FROM messages WHERE deleted = 0",
     ).fetchall()
-    return [dict(r) for r in rows]
+
+    buckets = {}
+    for row in rows:
+        year = _extract_year(row[0])
+        if year is None:
+            continue
+        if year not in buckets:
+            buckets[year] = {"year": year, "count": 0, "total_size": 0}
+        buckets[year]["count"] += 1
+        buckets[year]["total_size"] += row[1] or 0
+
+    return sorted(buckets.values(), key=lambda r: r["year"])
 
 
 def total_size(conn):
