@@ -9,7 +9,7 @@ from mailbomb.auth import get_credentials_path, get_token_path, get_gmail_servic
 from mailbomb.db import init_db
 from mailbomb.scanner import scan_messages
 from mailbomb.analyzer import top_senders_by_count, top_senders_by_size, mailing_lists, breakdown_by_year, total_size
-from mailbomb.executor import delete_messages, resolve_message_ids
+from mailbomb.executor import delete_messages, trash_messages, resolve_message_ids
 
 console = Console()
 
@@ -151,7 +151,9 @@ def analyze(before, after, top):
 @click.option("--after", default=None, help="Delete messages after this date")
 @click.option("--min-size", default=None, help="Delete messages larger than this (e.g., 5MB)")
 @click.option("--dry-run", is_flag=True, help="Show what would be deleted without deleting")
-def delete(sender, list_id, before, after, min_size, dry_run):
+@click.option("--permanent", is_flag=True, help="Permanently delete instead of moving to trash")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def delete(sender, list_id, before, after, min_size, dry_run, permanent, yes):
     """Delete messages matching the given filters."""
     from rich.table import Table
     from mailbomb.db import get_connection
@@ -202,14 +204,19 @@ def delete(sender, list_id, before, after, min_size, dry_run):
         conn.close()
         return
 
-    if not click.confirm(f"\nPermanently delete {len(ids):,} messages?"):
+    action = "permanently delete" if permanent else "trash"
+    if not yes and not click.confirm(f"\n{action.title()} {len(ids):,} messages?"):
         console.print("Cancelled.")
         conn.close()
         return
 
     conn.close()
-    deleted = delete_messages(ids)
-    console.print(f"\n[green]✓ Deleted {deleted:,} messages[/green]")
+    if permanent:
+        count = delete_messages(ids)
+        console.print(f"\n[green]✓ Permanently deleted {count:,} messages[/green]")
+    else:
+        count = trash_messages(ids)
+        console.print(f"\n[green]✓ Moved {count:,} messages to trash[/green]")
 
 
 @cli.command()

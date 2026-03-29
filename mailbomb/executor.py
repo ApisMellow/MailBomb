@@ -28,10 +28,42 @@ def resolve_message_ids(conn, sender_email=None, list_id=None, before=None, afte
     return [row[0] for row in rows]
 
 
-def delete_messages(gmail_ids, db_path=None, batch_size=1000):
-    """Delete messages from Gmail and mark them deleted in the local DB.
+def trash_messages(gmail_ids, db_path=None, batch_size=1000):
+    """Move messages to Gmail trash and mark them deleted in the local DB.
 
-    Gmail's batchDelete accepts up to 1000 IDs per call.
+    Uses batchModify to add the TRASH label (up to 1000 IDs per call).
+    Messages can be recovered from trash within 30 days.
+    """
+    if not gmail_ids:
+        return 0
+
+    service = get_gmail_service()
+    conn = get_connection(db_path)
+    total_trashed = 0
+
+    for i in range(0, len(gmail_ids), batch_size):
+        batch = gmail_ids[i : i + batch_size]
+        service.users().messages().batchModify(
+            userId="me",
+            body={"ids": batch, "addLabelIds": ["TRASH"], "removeLabelIds": ["INBOX"]},
+        ).execute()
+
+        placeholders = ",".join("?" for _ in batch)
+        conn.execute(
+            f"UPDATE messages SET deleted = 1 WHERE gmail_id IN ({placeholders})",
+            batch,
+        )
+        conn.commit()
+        total_trashed += len(batch)
+
+    conn.close()
+    return total_trashed
+
+
+def delete_messages(gmail_ids, db_path=None, batch_size=1000):
+    """Permanently delete messages from Gmail and mark them deleted in the local DB.
+
+    Gmail's batchDelete accepts up to 1000 IDs per call. This bypasses trash.
     """
     if not gmail_ids:
         return 0
