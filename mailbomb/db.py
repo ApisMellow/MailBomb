@@ -26,6 +26,19 @@ CREATE TABLE IF NOT EXISTS snippets (
     body_preview TEXT,
     FOREIGN KEY (gmail_id) REFERENCES messages(gmail_id)
 );
+
+CREATE TABLE IF NOT EXISTS rules (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_email TEXT,
+    list_id      TEXT,
+    created_at   TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rule_sender
+ON rules(sender_email) WHERE sender_email IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rule_list
+ON rules(list_id) WHERE list_id IS NOT NULL;
 """
 
 
