@@ -8,6 +8,7 @@ dependencies = [
     "google-auth-oauthlib>=1.0.0",
     "click>=8.1.0",
     "rich>=13.0.0",
+    "flask>=3.0.0",
 ]
 
 [project.scripts]
