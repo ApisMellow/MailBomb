@@ -212,5 +212,30 @@ def delete(sender, list_id, before, after, min_size, dry_run):
     console.print(f"\n[green]✓ Deleted {deleted:,} messages[/green]")
 
 
+@cli.command()
+def stats():
+    """Show scanning and deletion progress."""
+    from mailbomb.db import get_connection, count_messages
+
+    conn = get_connection()
+
+    total = count_messages(conn, include_deleted=True)
+    active = count_messages(conn, include_deleted=False)
+    deleted = total - active
+
+    active_size = conn.execute(
+        "SELECT COALESCE(SUM(size_bytes), 0) FROM messages WHERE deleted = 0"
+    ).fetchone()[0]
+    deleted_size = conn.execute(
+        "SELECT COALESCE(SUM(size_bytes), 0) FROM messages WHERE deleted = 1"
+    ).fetchone()[0]
+
+    console.print(f"\n[bold]MailBomb Stats[/bold]")
+    console.print(f"  Messages scanned:  {total:,}")
+    console.print(f"  Active (kept):     {active:,} ({active_size / (1024*1024):.1f} MB)")
+    console.print(f"  Deleted:           {deleted:,} ({deleted_size / (1024*1024):.1f} MB reclaimed)")
+    conn.close()
+
+
 if __name__ == "__main__":
     cli()
