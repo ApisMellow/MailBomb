@@ -379,6 +379,8 @@
         // --- Init ---
         setupVoice();
         loadPatterns();
+        // Prefetch snippets in background
+        fetch("/api/prefetch", { method: "POST" });
     </script>
 </body>
 </html>

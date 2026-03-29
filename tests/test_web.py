@@ -119,3 +119,20 @@ def test_api_rule(client):
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data["rule_created"] is True
+
+
+def test_api_prefetch(client):
+    """Prefetch endpoint triggers snippet loading."""
+    with patch("mailbomb.web.get_gmail_service") as mock_svc:
+        mock_gmail = MagicMock()
+        mock_svc.return_value = mock_gmail
+        mock_gmail.users().messages().get().execute.return_value = {
+            "payload": {
+                "mimeType": "text/plain",
+                "body": {"data": "SGVsbG8gV29ybGQ="},
+            }
+        }
+        response = client.post("/api/prefetch")
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert "prefetched" in data

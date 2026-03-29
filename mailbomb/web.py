@@ -1,5 +1,6 @@
 import json
 from flask import Flask, render_template, request, jsonify
+from mailbomb.auth import get_gmail_service
 from mailbomb.db import get_connection, init_db
 from mailbomb.executor import resolve_message_ids, trash_messages
 from mailbomb.reviewer import rank_patterns
@@ -38,7 +39,6 @@ def create_app(db_path=None):
         if snippet is None:
             # Try fetching from Gmail (requires auth)
             try:
-                from mailbomb.auth import get_gmail_service
                 service = get_gmail_service()
                 conn = _get_conn()
                 snippet = fetch_and_cache_snippet(service, conn, gmail_id)
@@ -121,5 +121,27 @@ def create_app(db_path=None):
             "deleted_count": deleted[0],
             "deleted_size": deleted[1],
         })
+
+    @app.route("/api/prefetch", methods=["POST"])
+    def api_prefetch():
+        """Prefetch one snippet per pattern group for fast card display."""
+        try:
+            service = get_gmail_service()
+        except Exception as e:
+            return jsonify({"prefetched": 0, "error": str(e)})
+
+        conn = _get_conn()
+        patterns = rank_patterns(conn)
+        count = 0
+        for p in patterns[:30]:
+            gmail_id = p.get("sample_gmail_id")
+            if gmail_id:
+                try:
+                    fetch_and_cache_snippet(service, conn, gmail_id)
+                    count += 1
+                except Exception:
+                    continue
+        conn.close()
+        return jsonify({"prefetched": count})
 
     return app
