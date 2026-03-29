@@ -146,6 +146,29 @@ mailbomb stats
 
 Shows how many messages you've scanned, kept, and deleted, with sizes.
 
+### Review and triage
+
+```bash
+mailbomb review
+```
+
+Opens a local web interface for smart triage. The tool analyzes your indexed messages, groups them by sender/list, and ranks them by how likely they are to be bulk mail. Each pattern card shows:
+
+- Sender, message count, and total size
+- Sample subject lines
+- A preview snippet from a representative message
+- A bulk likelihood score
+
+**Actions** (voice or keyboard):
+- **Toss** (`T`) — move all messages from this sender to trash
+- **Keep** (`K`) — mark as reviewed, skip this sender
+- **Skip** (`S`) — come back to this later
+- **Rule** (`R`) — trash all messages AND create a permanent rule
+
+**Voice:** Click the mic icon to enable voice commands. Say "toss", "keep", "skip", or "rule".
+
+The review server runs on `http://localhost:5000` by default. Use `--port` to change it.
+
 ## Typical Workflow
 
 ```bash
@@ -191,4 +214,4 @@ pytest tests/ -v
 
 ## Future Plans
 
-- **Voice review mode** (`mailbomb review`) — displays messages one at a time with voice-driven keep/delete decisions for hands-free triage
+- **Rule auto-apply** — automatically apply saved rules when scanning new messages
