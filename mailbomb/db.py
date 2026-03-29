@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_sender_email ON messages(sender_email);
 CREATE INDEX IF NOT EXISTS idx_date ON messages(date);
 CREATE INDEX IF NOT EXISTS idx_size ON messages(size_bytes);
+
+CREATE TABLE IF NOT EXISTS snippets (
+    gmail_id    TEXT PRIMARY KEY,
+    body_preview TEXT,
+    FOREIGN KEY (gmail_id) REFERENCES messages(gmail_id)
+);
 """
 
 
