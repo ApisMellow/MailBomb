@@ -8,6 +8,7 @@ from rich.panel import Panel
 from mailbomb.auth import get_credentials_path, get_token_path, get_gmail_service
 from mailbomb.db import init_db
 from mailbomb.scanner import scan_messages
+from mailbomb.analyzer import top_senders_by_count, top_senders_by_size, mailing_lists, breakdown_by_year, total_size
 
 console = Console()
 
@@ -79,6 +80,67 @@ def scan(before, after, batch_size):
     result = scan_messages(query=query, batch_size=batch_size)
 
     console.print(f"\n[green]✓ Done![/green] Fetched {result['fetched']:,} new, skipped {result['skipped']:,} existing")
+
+
+@cli.command()
+@click.option("--before", default=None, help="Filter messages before this date")
+@click.option("--after", default=None, help="Filter messages after this date")
+@click.option("--top", default=20, help="Number of top entries to show")
+def analyze(before, after, top):
+    """Analyze scanned message metadata for patterns."""
+    from rich.table import Table
+    from mailbomb.db import get_connection
+
+    conn = get_connection()
+
+    # Top senders by count
+    console.print("\n[bold]Top Senders by Message Count:[/bold]")
+    table = Table()
+    table.add_column("Sender", style="cyan")
+    table.add_column("Count", justify="right")
+    for row in top_senders_by_count(conn, limit=top):
+        table.add_row(row["sender_email"], f"{row['count']:,}")
+    console.print(table)
+
+    # Top senders by size
+    console.print("\n[bold]Top Senders by Total Size:[/bold]")
+    table = Table()
+    table.add_column("Sender", style="cyan")
+    table.add_column("Size", justify="right")
+    table.add_column("Count", justify="right")
+    for row in top_senders_by_size(conn, limit=top):
+        size_mb = row["total_size"] / (1024 * 1024)
+        table.add_row(row["sender_email"], f"{size_mb:.1f} MB", f"{row['count']:,}")
+    console.print(table)
+
+    # Mailing lists
+    lists = mailing_lists(conn)
+    if lists:
+        console.print("\n[bold]Mailing Lists:[/bold]")
+        table = Table()
+        table.add_column("List-Id", style="cyan")
+        table.add_column("Count", justify="right")
+        table.add_column("Size", justify="right")
+        for row in lists:
+            size_mb = row["total_size"] / (1024 * 1024)
+            table.add_row(row["list_id"], f"{row['count']:,}", f"{size_mb:.1f} MB")
+        console.print(table)
+
+    # Year breakdown
+    console.print("\n[bold]Messages by Year:[/bold]")
+    table = Table()
+    table.add_column("Year", style="cyan")
+    table.add_column("Count", justify="right")
+    table.add_column("Size", justify="right")
+    for row in breakdown_by_year(conn):
+        size_mb = (row["total_size"] or 0) / (1024 * 1024)
+        table.add_row(row["year"], f"{row['count']:,}", f"{size_mb:.1f} MB")
+    console.print(table)
+
+    # Total
+    total = total_size(conn)
+    console.print(f"\n[bold]Total indexed:[/bold] {total / (1024*1024):.1f} MB")
+    conn.close()
 
 
 if __name__ == "__main__":
