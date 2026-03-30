@@ -276,6 +276,82 @@
             white-space: pre-wrap;
             word-wrap: break-word;
         }
+        /* --- Multi-column message view --- */
+        .multi-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #1a1a2e;
+            z-index: 100;
+            overflow-y: auto;
+        }
+        .multi-overlay.visible { display: block; }
+        .multi-header {
+            position: sticky;
+            top: 0;
+            background: #16213e;
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #0f3460;
+            z-index: 101;
+        }
+        .multi-header h2 { font-size: 16px; color: #fff; }
+        .multi-columns {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 12px;
+            padding: 16px 20px 60px;
+        }
+        .msg-column {
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .msg-col-header {
+            padding: 10px 12px;
+            background: #0f3460;
+            font-size: 13px;
+            font-weight: 600;
+            color: #e0e0e0;
+            border-bottom: 1px solid #1a3a6e;
+        }
+        .msg-col-header .msg-col-date {
+            font-weight: 400;
+            color: #888;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+        .msg-col-body {
+            padding: 12px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #b0b0b0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: auto;
+            flex: 1;
+            max-height: calc(100vh - 140px);
+        }
+        /* --- Selector badge --- */
+        .selector-info {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 12px;
+            padding: 6px 10px;
+            background: rgba(15, 52, 96, 0.4);
+            border-radius: 4px;
+        }
+        .selector-info code {
+            color: #4ecca3;
+            background: rgba(0,0,0,0.2);
+            padding: 1px 4px;
+            border-radius: 2px;
+        }
         /* --- End session screen --- */
         .session-screen {
             display: none;
@@ -413,6 +489,15 @@
         </div>
         <div class="overlay-body" id="overlayBody">Loading...</div>
     </div>
+    <div class="multi-overlay" id="multiOverlay">
+        <div class="multi-header">
+            <h2 id="multiTitle">Sample Messages</h2>
+            <div>
+                <button class="overlay-close" onclick="closeMultiOverlay()" style="margin-left:8px;">Close <kbd>Esc</kbd></button>
+            </div>
+        </div>
+        <div class="multi-columns" id="multiColumns">Loading...</div>
+    </div>
     <div class="session-screen" id="sessionScreen">
         <div class="session-header">
             <h2>Session Summary</h2>
@@ -511,7 +596,12 @@
                         <span><strong>${p.count.toLocaleString()}</strong> messages</span>
                         <span><strong>${sizeMB}</strong> MB</span>
                     </div>
-                    <div class="subjects"><h3>Sample Subjects</h3>${subjects || "<em>No subjects</em>"}</div>
+                    <div class="selector-info">
+                        Selector: <code>sender_email = "${escHtml(p.sender_email)}"</code>
+                        ${p.list_id ? ` + <code>list_id = "${escHtml(p.list_id)}"</code>` : ""}
+                        — matches <strong>all ${p.count.toLocaleString()}</strong> messages from this sender
+                    </div>
+                    <div class="subjects"><h3>Sample Subjects (${(p.sample_subjects || []).length} distinct)</h3>${subjects || "<em>No subjects</em>"}</div>
                     <div class="snippet-box" id="snippetBox">
                         <h3>Preview</h3>
                         <div id="snippetText">Loading...</div>
@@ -523,7 +613,7 @@
                         <button class="btn btn-rule" onclick="doAction('rule')">Rule <kbd>R</kbd></button>
                     </div>
                     <div style="text-align:center; margin-top: 12px;">
-                        <button class="nav-btn" onclick="showFullMessage()" style="padding: 8px 20px;">Show Full Message <kbd>F</kbd></button>
+                        <button class="nav-btn" onclick="showFullMessage()" style="padding: 8px 20px;">Show 5 Diverse Samples <kbd>F</kbd></button>
                     </div>
                     <div class="voice-heard" id="voiceHeard"></div>
                 </div>
@@ -541,6 +631,7 @@
         // --- Actions ---
         async function doAction(action) {
             if (overlayOpen) closeOverlay();
+            if (multiOverlayOpen) closeMultiOverlay();
             const p = patterns[currentIndex];
             const body = JSON.stringify({
                 sender_email: p.sender_email,
@@ -604,17 +695,14 @@
             }
         }
 
-        // --- Full message overlay ---
-        async function showFullMessage() {
-            const p = patterns[currentIndex];
-            if (!p || !p.sample_gmail_id) return;
-            document.getElementById("overlayTitle").textContent =
-                `Full Message — ${p.sender_email}`;
+        // --- Full message overlay (single — used by session screen) ---
+        async function showSingleMessage(gmailId, title) {
+            document.getElementById("overlayTitle").textContent = title || "Full Message";
             document.getElementById("overlayBody").textContent = "Loading full message...";
             document.getElementById("overlay").classList.add("visible");
             overlayOpen = true;
 
-            const resp = await fetch(`/api/fullmessage/${p.sample_gmail_id}`);
+            const resp = await fetch(`/api/fullmessage/${gmailId}`);
             const data = await resp.json();
             document.getElementById("overlayBody").textContent = data.body || "[No content]";
         }
@@ -624,11 +712,50 @@
             overlayOpen = false;
         }
 
+        // --- Multi-column diverse samples ---
+        let multiOverlayOpen = false;
+
+        async function showFullMessage() {
+            const p = patterns[currentIndex];
+            if (!p) return;
+            document.getElementById("multiTitle").textContent =
+                `5 Diverse Samples — ${p.sender_email}`;
+            document.getElementById("multiColumns").innerHTML =
+                '<div style="text-align:center;padding:40px;color:#a0a0a0;grid-column:1/-1;">Loading messages...</div>';
+            document.getElementById("multiOverlay").classList.add("visible");
+            multiOverlayOpen = true;
+
+            const resp = await fetch(`/api/diverse-samples/${encodeURIComponent(p.sender_email)}`);
+            const samples = await resp.json();
+
+            if (samples.length === 0) {
+                document.getElementById("multiColumns").innerHTML =
+                    '<div style="text-align:center;padding:40px;color:#666;grid-column:1/-1;">No messages available.</div>';
+                return;
+            }
+
+            document.getElementById("multiColumns").innerHTML = samples.map(s => `
+                <div class="msg-column">
+                    <div class="msg-col-header">
+                        ${escHtml(s.subject || '(no subject)')}
+                        <div class="msg-col-date">${escHtml(s.date || '')}</div>
+                    </div>
+                    <div class="msg-col-body">${escHtml(s.body || '[No content]')}</div>
+                </div>
+            `).join("");
+        }
+
+        function closeMultiOverlay() {
+            document.getElementById("multiOverlay").classList.remove("visible");
+            multiOverlayOpen = false;
+        }
+
         // --- Keyboard ---
         document.addEventListener("keydown", (e) => {
             if (e.target.tagName === "INPUT") return;
             if (e.key === "Escape") {
                 if (overlayOpen) { closeOverlay(); return; }
+                if (multiOverlayOpen) { closeMultiOverlay(); return; }
                 if (sessionScreenOpen) { resumeSession(); return; }
                 return;
             }
@@ -679,7 +806,8 @@
                 } else if (text.includes("forward")) {
                     navigate(1);
                 } else if (text.includes("close")) {
-                    closeOverlay();
+                    if (multiOverlayOpen) closeMultiOverlay();
+                    if (overlayOpen) closeOverlay();
                 } else if (text.includes("quit") || text.includes("done") || text.includes("stop") || text.includes("end")) {
                     showSessionScreen();
                 } else {
@@ -779,15 +907,7 @@
         }
 
         async function viewSessionMessage(gmailId) {
-            // Reuse the full message overlay
-            document.getElementById("overlayTitle").textContent = "Full Message";
-            document.getElementById("overlayBody").textContent = "Loading...";
-            document.getElementById("overlay").classList.add("visible");
-            overlayOpen = true;
-
-            const resp = await fetch(`/api/fullmessage/${gmailId}`);
-            const data = await resp.json();
-            document.getElementById("overlayBody").textContent = data.body || "[No content]";
+            showSingleMessage(gmailId, "Full Message");
         }
 
         async function restoreMessage(gmailId, sizeBytes) {
