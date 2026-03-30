@@ -47,6 +47,75 @@ def create_app(db_path=None):
                 return jsonify({"snippet": f"[Could not fetch: {e}]"})
         return jsonify({"snippet": snippet or ""})
 
+    @app.route("/api/diverse-samples/<sender_email>")
+    def api_diverse_samples(sender_email):
+        """Return up to 5 diverse messages from a sender with full bodies.
+
+        Picks messages with distinct subjects to maximize variety.
+        """
+        conn = _get_conn()
+        # Get all messages from this sender, grouped by distinct subject
+        rows = conn.execute("""
+            SELECT gmail_id, subject, date, size_bytes
+            FROM messages
+            WHERE sender_email = ? AND deleted = 0
+            ORDER BY subject, date DESC
+        """, (sender_email,)).fetchall()
+        conn.close()
+
+        if not rows:
+            return jsonify([])
+
+        # Pick up to 5 with distinct subjects, spread across the range
+        seen_subjects = set()
+        candidates = []
+        for r in rows:
+            subj = (r[1] or "").strip().lower()
+            if subj not in seen_subjects:
+                seen_subjects.add(subj)
+                candidates.append({
+                    "gmail_id": r[0],
+                    "subject": r[1],
+                    "date": r[2],
+                    "size_bytes": r[3],
+                })
+            if len(candidates) >= 5:
+                break
+
+        # If fewer than 5 distinct subjects, fill from remaining messages
+        if len(candidates) < 5:
+            for r in rows:
+                if len(candidates) >= 5:
+                    break
+                if r[0] not in {c["gmail_id"] for c in candidates}:
+                    candidates.append({
+                        "gmail_id": r[0],
+                        "subject": r[1],
+                        "date": r[2],
+                        "size_bytes": r[3],
+                    })
+
+        # Fetch full bodies
+        try:
+            service = get_gmail_service()
+            for c in candidates:
+                try:
+                    msg = service.users().messages().get(
+                        userId="me", id=c["gmail_id"], format="full"
+                    ).execute()
+                    payload = msg.get("payload", {})
+                    parts = payload.get("parts", [])
+                    if not parts:
+                        parts = [payload]
+                    c["body"] = extract_plaintext(parts)
+                except Exception:
+                    c["body"] = "[Could not fetch]"
+        except Exception as e:
+            for c in candidates:
+                c["body"] = f"[Auth error: {e}]"
+
+        return jsonify(candidates)
+
     @app.route("/api/fullmessage/<gmail_id>")
     def api_fullmessage(gmail_id):
         """Fetch the full message body (no truncation) for the overlay view."""
