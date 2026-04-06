@@ -240,3 +240,8 @@ pytest tests/ -v
 
 - **Activity sidebar** — right-hand column showing a running log of dispositioned senders as you triage (trashed, kept, ruled)
 - **Rule auto-apply** — automatically apply saved rules when scanning new messages
+
+## Contributors
+
+- **David** — creator and maintainer
+- **Helper-Drone** — AI coding assistant (commits, PRs, and code changes)
